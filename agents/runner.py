@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Any, Dict, Optional, Sequence, Union
 
 from engine.db import DB_PATH
+from engine.restart import RestartRefused, reset_world
 from engine.scheduler import DEFAULT_CONFIG, load_config, run_generation
 
 PathLike = Union[str, Path]
@@ -32,6 +33,11 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         default=DB_PATH,
         help="SQLite database path (defaults to world.db)",
     )
+    parser.add_argument(
+        "--restart",
+        action="store_true",
+        help="archive and wipe the world before starting a fresh generation",
+    )
     mode = parser.add_mutually_exclusive_group()
     mode.add_argument(
         "--mock-llm",
@@ -44,6 +50,14 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         help="ask the configured Ollama model for each daily plan",
     )
     args = parser.parse_args(argv)
+
+    if args.restart:
+        try:
+            result = reset_world(args.db)
+        except RestartRefused as exc:
+            print("Refused: {}".format(exc))
+            return 1
+        print("World restarted. Archive: {}".format(result["archive"]))
 
     policy = None
     if args.mock_llm:

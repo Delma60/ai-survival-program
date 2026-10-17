@@ -60,3 +60,20 @@ machine; `scripts/check_llm.py` makes a single connectivity check first.
 Open http://localhost:8000 for the local dashboard. Keep it on localhost and
 keep real-world actions behind human approval; agents must never receive
 credentials or direct access to external APIs.
+
+To archive and reset the default world database to generation 1, day 1, run:
+
+```powershell
+python -m engine.restart
+```
+
+The command asks for confirmation and saves a SQLite backup under
+`logs/archive/` before clearing simulation data. A running world must be paused
+before it can be reset. To reset and immediately start a fresh generation:
+
+```powershell
+python -m agents.runner --restart --mock-llm --seed 42
+```
+
+The dashboard also provides a **Restart world** button. Pause the simulation
+and wait for its runner process to stop before using it.

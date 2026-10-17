@@ -25,7 +25,10 @@
 <body>
 <div class="row">
   <h1>AI Survival Program <span id="status"></span></h1>
-  <button id="toggle"></button>
+  <div>
+    <button id="restart">Restart world</button>
+    <button id="toggle"></button>
+  </div>
 </div>
 <div class="cards" id="cards"></div>
 <div class="grid">
@@ -113,6 +116,19 @@ $('#toggle').onclick = async () => {
     await refresh();
   } catch (error) {
     console.error('Pause control failed:', error);
+  }
+};
+$('#restart').onclick = async () => {
+  if (!confirm('Restart the world? The database will be archived, then all agents, money and events will be cleared.')) return;
+  try {
+    const result = await request('/api/restart', {
+      method:'POST',
+      headers:{'X-Confirm':'restart'}
+    });
+    alert('World restarted. Archive: ' + (result.archive || 'none'));
+    await refresh();
+  } catch (error) {
+    alert(`Restart failed (${error.message}). Pause the simulation, wait for the runner to stop, then try again.`);
   }
 };
 refresh();

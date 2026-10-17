@@ -6,10 +6,11 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any, AsyncIterator, Dict, Iterable, Tuple
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse
 
 from engine.db import DB_PATH, connect, initialize_database
+from engine.restart import RestartRefused, reset_world
 
 ROOT = Path(__file__).resolve().parent
 
@@ -163,3 +164,16 @@ def resume() -> Dict[str, bool]:
         write=True,
     )
     return {"paused": False}
+
+
+@app.post("/api/restart")
+def restart(request: Request) -> Dict[str, Any]:
+    """Archive and reset the world after an explicit confirmation."""
+    if request.headers.get("x-confirm") != "restart":
+        raise HTTPException(status_code=400, detail="Missing restart confirmation")
+    try:
+        result = reset_world(DB_PATH)
+    except RestartRefused as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    archive = result["archive"]
+    return {"ok": True, "archive": Path(archive).name if archive else None}
