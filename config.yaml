@@ -1,0 +1,30 @@
+days_per_generation: 30
+cohort_size: 12
+starting_balance: 50
+daily_upkeep: 5
+max_steps_per_day: 6
+
+reproduction:
+  top_fraction: 0.25
+  seed_money: 20
+  mutation_rate: 0.2
+
+royalty:
+  rate: 0.10
+  grandparent_rate: 0.01
+  window_days: 60
+
+marketplace_fee: 0.03
+approval_required_for:
+  - post_content
+  - propose_purchase
+  - create_website
+  - deploy
+daily_spend_cap: 30
+
+low_spec:
+  llm_calls_per_agent_per_day: 1
+  num_ctx: 2048
+  num_predict: 200
+  cohort_size: 8
+  model: llama3.2:3b
