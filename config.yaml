@@ -22,6 +22,12 @@ approval_required_for:
   - deploy
 daily_spend_cap: 30
 
+jobs:
+  jobs_per_day: 2
+  minimum_reward: 10
+  maximum_reward: 18
+  success_probability: 0.9
+
 low_spec:
   llm_calls_per_agent_per_day: 1
   num_ctx: 2048

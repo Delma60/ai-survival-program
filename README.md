@@ -15,8 +15,8 @@ architecture, safety requirements, and phased roadmap.
 - `logs/` — local run logs
 - `tests/` — automated tests
 
-The modules are scaffolded for phased implementation; the simulation is not
-ready to run yet.
+Phase 1 provides a scripted simulation and dashboard. It does not call Ollama;
+LLM-driven decisions remain gated on the Phase 1 economy-survival exit criterion.
 
 ## Development setup (Windows PowerShell)
 
@@ -29,5 +29,27 @@ python -m pip install --upgrade pip
 python -m pip install -r requirements.txt
 ```
 
-Simulation settings are in `config.yaml`. Keep real-world actions behind human
-approval and never give agents direct access to credentials or external APIs.
+## Run Phase 1
+
+From the project directory with the virtual environment active:
+
+```powershell
+python -m agents.runner --mock-llm --seed 42
+python -m uvicorn dashboard.server:app --port 8000
+```
+
+Run the test suite from the project root with:
+
+```powershell
+python -m pytest tests -q
+```
+
+The simulation uses the 8-agent low-spec cohort, 50 starting credits per agent,
+and 5 credits of daily upkeep. Jobs and their rewards are tunable under `jobs`
+in `config.yaml`. `--mock-llm` exercises a deterministic decision interface and
+does not call a model. The default database is `world.db`; it uses SQLite WAL
+mode and is ignored by Git.
+
+Open http://localhost:8000 for the local dashboard. Keep it on localhost and
+keep real-world actions behind human approval; agents must never receive
+credentials or direct access to external APIs.

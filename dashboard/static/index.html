@@ -1,14 +1,121 @@
 <!doctype html>
 <html lang="en">
 <head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>AI Survival Program</title>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AI Survival Program</title>
+<style>
+  :root{--bg:#0f1115;--card:#181b22;--tx:#e6e8ee;--mut:#8b93a7;--ok:#3ecf8e;--bad:#ef5b5b;--acc:#6aa6ff;--line:#262a33}
+  @media(prefers-color-scheme:light){:root{--bg:#f5f6f8;--card:#fff;--tx:#1b1e25;--mut:#5d667a;--line:#e1e4ea}}
+  *{box-sizing:border-box}body{margin:0;padding:16px;background:var(--bg);color:var(--tx);font:14px system-ui,sans-serif}
+  h1{font-size:18px;margin:0 0 12px}h2{font-size:14px;margin:0 0 8px;color:var(--mut);font-weight:600}
+  .cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px;margin-bottom:14px}
+  .card,.panel{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:12px}
+  .card b{display:block;font-size:22px;margin-top:4px}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(340px,1fr));gap:14px}
+  .scroll{overflow:auto;max-height:340px}table{border-collapse:collapse;width:100%}
+  th,td{text-align:left;padding:6px 8px;border-bottom:1px solid var(--line);white-space:nowrap}
+  th{color:var(--mut);font-weight:600}.ok{color:var(--ok)}.bad{color:var(--bad)}
+  button{border:1px solid var(--line);background:var(--card);color:var(--tx);border-radius:6px;padding:5px 10px;cursor:pointer}
+  button.primary{background:var(--acc);color:#fff;border-color:var(--acc)}
+  .bar{height:10px;background:var(--line);border-radius:5px;overflow:hidden;min-width:80px}
+  .bar i{display:block;height:100%;background:var(--ok)}.row{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px}
+  .pre{white-space:pre-wrap;word-break:break-word;font:12px ui-monospace,monospace;color:var(--mut)}
+</style>
 </head>
 <body>
-  <main>
-    <h1>AI Survival Program</h1>
-    <p>The dashboard will be implemented in a later phase.</p>
-  </main>
+<div class="row">
+  <h1>AI Survival Program <span id="status"></span></h1>
+  <button id="toggle"></button>
+</div>
+<div class="cards" id="cards"></div>
+<div class="grid">
+  <div class="panel"><h2>Approval queue</h2><div class="scroll" id="approvals"></div></div>
+  <div class="panel"><h2>Generations</h2><div class="scroll" id="gens"></div></div>
+  <div class="panel"><h2>Agents</h2><div class="scroll" id="agents"></div></div>
+  <div class="panel"><h2>Live events</h2><div class="scroll" id="events"></div></div>
+</div>
+<script>
+const $ = selector => document.querySelector(selector);
+const esc = value => String(value ?? '').replace(/[&<>"']/g, character => ({
+  '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'
+}[character]));
+const request = async (url, options) => {
+  const response = await fetch(url, options);
+  if (!response.ok) throw new Error(`${response.status} ${response.statusText}`);
+  return response.json();
+};
+const get = url => request(url);
+const post = url => request(url, {method:'POST'});
+let paused = false;
+
+async function refresh() {
+  try {
+    const [summary, agentRows, generationRows, eventRows, approvalRows] = await Promise.all([
+      get('/api/summary'),get('/api/agents'),get('/api/generations'),
+      get('/api/events'),get('/api/approvals')
+    ]);
+    paused = summary.paused;
+    $('#status').innerHTML = paused
+      ? '<span class="bad">● paused</span>' : '<span class="ok">● running</span>';
+    $('#toggle').textContent = paused ? 'Resume' : 'Pause all';
+    $('#toggle').className = paused ? 'primary' : '';
+    const card = (label, value) => `<div class="card">${esc(label)}<b>${esc(value)}</b></div>`;
+    $('#cards').innerHTML = card('Generation',summary.generation) +
+      card('Day',`${summary.day} / 30`) + card('Alive',summary.alive) +
+      card('Dead',summary.dead) + card('Total money',summary.money) +
+      card('Royalties paid',summary.royalties) + card('Pending approvals',summary.pending);
+
+    $('#approvals').innerHTML = approvalRows.length
+      ? '<table>' + approvalRows.map(row => `<tr><td>#${esc(row.id)} agent ${esc(row.agent_id)} · <b>${esc(row.kind)}</b>
+          <div class="pre">${esc(row.payload_json)}</div></td>
+          <td><button class="primary" data-d="approved" data-id="${esc(row.id)}">Approve</button>
+          <button data-d="rejected" data-id="${esc(row.id)}">Reject</button></td></tr>`).join('') + '</table>'
+      : '<span class="pre">Nothing waiting.</span>';
+
+    $('#gens').innerHTML = '<table><tr><th>Gen</th><th>Survival</th><th>Alive/Total</th><th>Avg credits</th></tr>' +
+      generationRows.map(row => {
+        const percent = row.total ? Math.round(100 * row.alive / row.total) : 0;
+        return `<tr><td>${esc(row.gen)}</td><td><div class="bar"><i style="width:${percent}%"></i></div></td>
+          <td>${esc(row.alive)}/${esc(row.total)}</td><td>${esc(row.avg_balance)}</td></tr>`;
+      }).join('') + '</table>';
+
+    $('#agents').innerHTML = '<table><tr><th>ID</th><th>Gen</th><th>Parent</th><th>Role</th><th>Balance</th><th>Status</th></tr>' +
+      agentRows.map(row => `<tr><td>${esc(row.id)}</td><td>${esc(row.generation)}</td>
+        <td>${esc(row.parent_id ?? '-')}</td><td>${esc(row.role)}</td><td>${esc(row.balance)}</td>
+        <td class="${row.status === 'alive' ? 'ok' : 'bad'}">${esc(row.status)}</td></tr>`).join('') +
+      '</table>';
+
+    $('#events').innerHTML = '<table>' + eventRows.map(row =>
+      `<tr><td>${esc((row.ts || '').slice(11,19))}</td><td>${row.agent_id == null ? 'Engine' : `A${esc(row.agent_id)}`}</td>
+      <td>${esc(row.tool)}</td><td class="pre">${esc((row.result_json || '').slice(0,120))}</td></tr>`
+    ).join('') + '</table>';
+  } catch (error) {
+    console.error('Dashboard refresh failed:', error);
+    $('#status').textContent = '(waiting for engine/database…)';
+  }
+}
+
+document.addEventListener('click', async event => {
+  const button = event.target.closest('button[data-id]');
+  if (!button) return;
+  try {
+    await post(`/api/approvals/${button.dataset.id}/${button.dataset.d}`);
+    await refresh();
+  } catch (error) {
+    console.error('Approval decision failed:', error);
+  }
+});
+
+$('#toggle').onclick = async () => {
+  try {
+    await post(paused ? '/api/resume' : '/api/pause');
+    await refresh();
+  } catch (error) {
+    console.error('Pause control failed:', error);
+  }
+};
+refresh();
+setInterval(refresh, 5000);
+</script>
 </body>
 </html>
