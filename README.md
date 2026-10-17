@@ -19,6 +19,19 @@ Phase 1 provides a scripted simulation and dashboard. Phase 2 adds an optional
 Ollama policy that makes one structured JSON decision per agent per day; the
 engine validates and logs each decision before execution.
 
+Phase 2 close-out tools compare seeded random and scripted survival baselines
+and export the event audit log plus a per-day survival curve:
+
+```powershell
+python scripts/compare_policies.py --seeds 20
+python -m agents.runner --llm --seed 42 --db world-llm.db
+python scripts/export_events.py --db world-llm.db --out logs/events.csv
+```
+
+Compare the LLM runner's reported survival rate with the baseline averages.
+The export command also writes `logs/survival.csv` by default; pass
+`--survival-out` to choose another path.
+
 ## Development setup (Windows PowerShell)
 
 This project requires Python 3.11 or newer. From the project directory:

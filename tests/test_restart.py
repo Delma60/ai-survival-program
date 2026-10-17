@@ -7,6 +7,7 @@ import yaml
 from fastapi import HTTPException
 
 import dashboard.server as dashboard
+from agents.runner import main as runner_main
 from engine.db import connect, initialize_database
 from engine.restart import RestartRefused, reset_world
 from engine.scheduler import run_generation
@@ -74,11 +75,13 @@ def test_reset_archives_wipes_and_allows_identical_fresh_run(tmp_path):
             row["key"]: row["value"]
             for row in connection.execute("SELECT * FROM meta")
         }
-        assert meta["run_status"] == "idle"
-        assert meta["generation"] == "1"
-        assert meta["day"] == "1"
-        assert meta["paused"] == "0"
-        assert meta["run_seed"] == "0"
+        assert meta == {
+            "paused": "0",
+            "generation": "1",
+            "day": "1",
+            "run_status": "idle",
+            "run_seed": "0",
+        }
     finally:
         connection.close()
 
@@ -94,6 +97,36 @@ def test_restart_refused_while_running_but_allowed_when_paused(tmp_path):
 
     set_meta(db_path, paused="1")
     assert reset_world(db_path, archive=False)["ok"] is True
+
+
+def test_runner_restart_starts_a_fresh_generation(tmp_path, capsys):
+    db_path = tmp_path / "world.db"
+    config_path = make_config(tmp_path)
+
+    assert runner_main(
+        [
+            "--config",
+            str(config_path),
+            "--db",
+            str(db_path),
+            "--restart",
+            "--mock-llm",
+            "--seed",
+            "5",
+        ]
+    ) == 0
+
+    assert "World restarted. Archive:" in capsys.readouterr().out
+    connection = connect(db_path)
+    try:
+        assert connection.execute(
+            "SELECT value FROM meta WHERE key = 'generation'"
+        ).fetchone()["value"] == "1"
+        assert connection.execute(
+            "SELECT value FROM meta WHERE key = 'run_status'"
+        ).fetchone()["value"] == "complete"
+    finally:
+        connection.close()
 
 
 def test_dashboard_restart_requires_header_and_maps_refusal(tmp_path, monkeypatch):
