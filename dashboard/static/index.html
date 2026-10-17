@@ -55,8 +55,9 @@ async function refresh() {
       get('/api/events'),get('/api/approvals')
     ]);
     paused = summary.paused;
-    $('#status').innerHTML = paused
-      ? '<span class="bad">● paused</span>' : '<span class="ok">● running</span>';
+    const engineStatus = paused ? 'paused' : summary.status;
+    const statusClass = engineStatus === 'running' ? 'ok' : 'bad';
+    $('#status').innerHTML = `<span class="${statusClass}">● ${esc(engineStatus)}</span>`;
     $('#toggle').textContent = paused ? 'Resume' : 'Pause all';
     $('#toggle').className = paused ? 'primary' : '';
     const card = (label, value) => `<div class="card">${esc(label)}<b>${esc(value)}</b></div>`;

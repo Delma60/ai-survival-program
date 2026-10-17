@@ -30,7 +30,7 @@ def test_generation_is_reproducible_and_within_survival_target(tmp_path):
         results.append(summary["alive_agents"] / summary["total_agents"])
 
     survival_rate = sum(results) / len(results)
-    assert 0.35 <= survival_rate <= 0.65
+    assert 0.40 <= survival_rate <= 0.60
 
     repeated = run_generation(
         config_path=config_path,

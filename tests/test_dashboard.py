@@ -1,4 +1,5 @@
 import json
+import asyncio
 
 import pytest
 from fastapi import HTTPException
@@ -10,10 +11,15 @@ from engine.db import connect, initialize_database
 def test_dashboard_summary_controls_and_approval_queue(tmp_path, monkeypatch):
     db_path = tmp_path / "world.db"
     monkeypatch.setattr(dashboard, "DB_PATH", db_path)
-    initialize_database(db_path)
-    dashboard.startup()
+
+    async def serve_lifespan():
+        async with dashboard.lifespan(dashboard.app):
+            assert dashboard.summary()["status"] == "idle"
+
+    asyncio.run(serve_lifespan())
 
     assert dashboard.summary()["paused"] is False
+    assert dashboard.summary()["status"] == "idle"
     assert dashboard.agents() == []
     assert dashboard.generations() == []
     assert dashboard.events() == []

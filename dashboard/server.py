@@ -2,8 +2,9 @@
 
 import json
 import sqlite3
+from contextlib import asynccontextmanager
 from pathlib import Path
-from typing import Any, Dict, Iterable, Tuple
+from typing import Any, AsyncIterator, Dict, Iterable, Tuple
 
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse
@@ -11,13 +12,16 @@ from fastapi.responses import FileResponse
 from engine.db import DB_PATH, connect, initialize_database
 
 ROOT = Path(__file__).resolve().parent
-app = FastAPI(title="AI Survival Program Dashboard")
 
 
-@app.on_event("startup")
-def startup() -> None:
+@asynccontextmanager
+async def lifespan(_: FastAPI) -> AsyncIterator[None]:
     """Ensure the database schema exists before serving dashboard requests."""
     initialize_database(DB_PATH)
+    yield
+
+
+app = FastAPI(title="AI Survival Program Dashboard", lifespan=lifespan)
 
 
 def query(
@@ -63,6 +67,7 @@ def summary() -> Dict[str, Any]:
         "generation": meta("generation", "1"),
         "day": meta("day", "1"),
         "paused": meta("paused") == "1",
+        "status": meta("run_status", "idle"),
         "alive": totals["alive"],
         "dead": totals["dead"],
         "money": round(totals["money_minor"] / 100, 2),

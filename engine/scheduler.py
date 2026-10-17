@@ -303,6 +303,14 @@ def run_generation(
                             {"day": day},
                             {"status": "dead", "balance_minor": balance},
                         )
+                    else:
+                        _record_event(
+                            connection,
+                            agent["id"],
+                            "settle_day",
+                            {"day": day},
+                            {"status": "alive", "balance_minor": balance},
+                        )
                 if day == days:
                     _set_meta(connection, "run_status", "complete")
                     _set_meta(connection, "day", days)
