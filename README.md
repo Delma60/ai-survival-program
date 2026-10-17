@@ -15,8 +15,9 @@ architecture, safety requirements, and phased roadmap.
 - `logs/` — local run logs
 - `tests/` — automated tests
 
-Phase 1 provides a scripted simulation and dashboard. It does not call Ollama;
-LLM-driven decisions remain gated on the Phase 1 economy-survival exit criterion.
+Phase 1 provides a scripted simulation and dashboard. Phase 2 adds an optional
+Ollama policy that makes one structured JSON decision per agent per day; the
+engine validates and logs each decision before execution.
 
 ## Development setup (Windows PowerShell)
 
@@ -35,6 +36,8 @@ From the project directory with the virtual environment active:
 
 ```powershell
 python -m agents.runner --mock-llm --seed 42
+python scripts/check_llm.py
+python -m agents.runner --llm --seed 42 --db world-llm.db
 python -m uvicorn dashboard.server:app --port 8000
 ```
 
@@ -49,6 +52,10 @@ and 5 credits of daily upkeep. Jobs and their rewards are tunable under `jobs`
 in `config.yaml`. `--mock-llm` exercises a deterministic decision interface and
 does not call a model. The default database is `world.db`; it uses SQLite WAL
 mode and is ignored by Git.
+
+Use `--llm` only after Ollama is running with the configured model. It performs
+one model request per living agent per day and can take hours on a CPU-only
+machine; `scripts/check_llm.py` makes a single connectivity check first.
 
 Open http://localhost:8000 for the local dashboard. Keep it on localhost and
 keep real-world actions behind human approval; agents must never receive

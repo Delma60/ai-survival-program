@@ -9,16 +9,20 @@ import time
 from pathlib import Path
 
 import yaml
-from openai import OpenAI
+from openai import OpenAI, OpenAIError
 
 ROOT = Path(__file__).resolve().parent.parent
-BASE_URL = "http://localhost:11434/v1"
 
 
 def main() -> int:
     cfg = yaml.safe_load((ROOT / "config.yaml").read_text(encoding="utf-8"))
     low = cfg["low_spec"]
-    client = OpenAI(base_url=BASE_URL, api_key="ollama")
+    llm = cfg.get("llm", {})
+    client = OpenAI(
+        base_url=str(llm.get("base_url", "http://localhost:11434/v1")),
+        api_key="ollama",
+        timeout=float(llm.get("timeout_seconds", 120)),
+    )
 
     start = time.perf_counter()
     try:
@@ -28,15 +32,16 @@ def main() -> int:
                 {"role": "system", "content": "Reply with JSON only."},
                 {
                     "role": "user",
-                    "content": 'You have 50 coins and no food. Choose one action: '
-                    '"work", "rest" or "buy_food". '
-                    'Return {"action": "...", "reason": "..."}',
+                    "content": 'Choose "work" or "end_day". '
+                    'Return {"action": "...", "note": "..."}',
                 },
             ],
             response_format={"type": "json_object"},
             max_tokens=low["num_predict"],
+            temperature=float(llm.get("temperature", 0.7)),
+            extra_body={"options": {"num_ctx": int(low["num_ctx"])}},
         )
-    except Exception as exc:  # connection refused, model not pulled, etc.
+    except OpenAIError as exc:
         print(f"FAIL: could not reach model '{low['model']}': {exc}")
         return 1
     elapsed = time.perf_counter() - start
@@ -50,7 +55,7 @@ def main() -> int:
         print(f"FAIL: reply is not valid JSON: {exc}")
         return 1
 
-    valid = {"work", "rest", "buy_food"}
+    valid = {"work", "end_day"}
     if data.get("action") not in valid:
         print(f"FAIL: 'action' must be one of {sorted(valid)}, got {data.get('action')!r}")
         return 1

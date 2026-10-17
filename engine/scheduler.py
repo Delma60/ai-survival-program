@@ -4,15 +4,17 @@ import json
 import random
 import sqlite3
 from pathlib import Path
-from typing import Any, Callable, Dict, Optional, Union
+from typing import Any, Callable, Dict, Optional, Tuple, Union
 
 import yaml
 
+from agents.memory import add_lesson, recent_lessons
 from engine.db import DB_PATH, atomic, connect, initialize_database
 from engine.jobs import generate_daily_jobs, log_event, work_one_job
 from engine.ledger import BASIS_POINTS, credit, credits_to_minor, debit
 
 PathLike = Union[str, Path]
+Decision = Union[str, Dict[str, Any]]
 DEFAULT_CONFIG = Path(__file__).resolve().parent.parent / "config.yaml"
 
 
@@ -70,6 +72,16 @@ def _record_event(
     )
 
 
+def _normalize_decision(decision: Any) -> Tuple[Any, str, Optional[str]]:
+    """Split a policy result into (action, note, error)."""
+    if isinstance(decision, dict):
+        error = decision.get("error")
+        return decision.get("action"), str(decision.get("note") or ""), (
+            str(error) if error else None
+        )
+    return decision, "", None
+
+
 def _create_cohort(
     connection: sqlite3.Connection,
     generation: int,
@@ -118,9 +130,11 @@ def run_generation(
     config_path: PathLike = DEFAULT_CONFIG,
     db_path: PathLike = DB_PATH,
     seed: int = 0,
-    decision_policy: Optional[Callable[[Dict[str, Any], random.Random], str]] = None,
+    decision_policy: Optional[
+        Callable[[Dict[str, Any], random.Random], Decision]
+    ] = None,
 ) -> Dict[str, Any]:
-    """Run or resume one scripted cohort and return its survival summary."""
+    """Run or resume one cohort and return its survival summary."""
     config = load_config(config_path)
     jobs_config = config["jobs"]
     royalty_config = config.get("royalty", {})
@@ -226,14 +240,31 @@ def run_generation(
                         "agent_id": agent_id,
                         "generation": generation,
                         "day": day,
+                        "days_total": days,
+                        "daily_upkeep": int(config["daily_upkeep"]),
                         "balance_minor": balance,
                         "open_jobs": int(open_jobs),
+                        "lessons": recent_lessons(
+                            connection,
+                            agent_id,
+                            int(config.get("llm", {}).get("lessons_in_prompt", 3)),
+                        ),
                     }
-                    action = (
+                    decision = (
                         decision_policy(state, agent_rng)
                         if decision_policy is not None
                         else ("work" if open_jobs else "end_day")
                     )
+                    action, note, error = _normalize_decision(decision)
+                    if error:
+                        _record_event(
+                            connection,
+                            agent_id,
+                            "action_rejected",
+                            {"day": day},
+                            {"error": error, "fallback": "end_day"},
+                        )
+                        action = "end_day"
                     if action not in ("work", "end_day"):
                         _record_event(
                             connection,
@@ -243,6 +274,14 @@ def run_generation(
                             {"error": "unsupported scripted action", "fallback": "end_day"},
                         )
                         action = "end_day"
+                    if note:
+                        add_lesson(
+                            connection,
+                            agent_id,
+                            day,
+                            note,
+                            int(config.get("llm", {}).get("max_note_chars", 200)),
+                        )
                     if action == "work":
                         work_one_job(
                             connection,
@@ -260,7 +299,7 @@ def run_generation(
                             agent_id,
                             "agent_decision",
                             {"day": day},
-                            {"action": "end_day"},
+                            {"action": "end_day", "note": note},
                         )
                     connection.execute(
                         "UPDATE agents SET last_action_day = ? WHERE id = ?",

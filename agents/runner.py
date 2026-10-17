@@ -1,4 +1,4 @@
-"""Phase 1 scripted agents and their deterministic mock-LLM interface."""
+"""Phase 1/2 agent runner: scripted, mock-LLM, or real LLM decisions."""
 
 import argparse
 import random
@@ -6,19 +6,19 @@ from pathlib import Path
 from typing import Any, Dict, Optional, Sequence, Union
 
 from engine.db import DB_PATH
-from engine.scheduler import DEFAULT_CONFIG, run_generation
+from engine.scheduler import DEFAULT_CONFIG, load_config, run_generation
 
 PathLike = Union[str, Path]
 
 
 def mock_llm_decision(state: Dict[str, Any], rng: random.Random) -> str:
-    """Return a deterministic action for exercising the future LLM interface."""
+    """Return a deterministic action for exercising the LLM interface."""
     del rng
     return "work" if state["open_jobs"] else "end_day"
 
 
 def main(argv: Optional[Sequence[str]] = None) -> int:
-    parser = argparse.ArgumentParser(description="Run one scripted agent generation.")
+    parser = argparse.ArgumentParser(description="Run one agent generation.")
     parser.add_argument("--seed", type=int, default=0, help="reproducible run seed")
     parser.add_argument(
         "--config",
@@ -32,13 +32,34 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         default=DB_PATH,
         help="SQLite database path (defaults to world.db)",
     )
-    parser.add_argument(
+    mode = parser.add_mutually_exclusive_group()
+    mode.add_argument(
         "--mock-llm",
         action="store_true",
-        help="use the deterministic decision interface; no model is called",
+        help="deterministic decision interface; no model is called",
+    )
+    mode.add_argument(
+        "--llm",
+        action="store_true",
+        help="ask the configured Ollama model for each daily plan",
     )
     args = parser.parse_args(argv)
-    policy = mock_llm_decision if args.mock_llm else None
+
+    policy = None
+    if args.mock_llm:
+        policy = mock_llm_decision
+    elif args.llm:
+        from agents.llm_client import OllamaClient
+        from agents.policy import make_llm_policy
+
+        config = load_config(args.config)
+        llm_config = config.get("llm", {})
+        policy = make_llm_policy(
+            OllamaClient(config),
+            retries=int(llm_config.get("retries", 1)),
+            max_note_chars=int(llm_config.get("max_note_chars", 200)),
+        )
+
     summary = run_generation(args.config, args.db, args.seed, policy)
     print(
         "Generation {generation}: {alive_agents}/{total_agents} alive "

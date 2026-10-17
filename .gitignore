@@ -12,6 +12,7 @@ htmlcov/
 world.db
 world.db-shm
 world.db-wal
+world*.db*
 logs/*
 !logs/.gitkeep
 sites/*
